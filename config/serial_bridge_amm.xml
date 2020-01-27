@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+   <profiles>
+      <participant profile_name="amm_participant">
+         <rtps>
+            <name>AMM_Serial_Bridge</name>
+            <participantID>15</participantID>
+         </rtps>
+      </participant>
+   </profiles>
+</dds>

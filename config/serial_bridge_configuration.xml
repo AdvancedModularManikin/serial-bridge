@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+   <Capability type="serial_bridge">
+      <enable>true</enable>      
+   </Capability>
+</Configuration>

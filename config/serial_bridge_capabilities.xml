@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CapabilitiesSchema xmlns="urn:AdvancedModularManikin"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    xsi:schemaLocation="urn:AdvancedModularManikin schema/CapabilitiesSchema.xsd">
+   <Capability type="serial_bridge">
+      <Subscriptions>
+         <ModuleConfiguration/>
+         <SimulationControl/>
+         <Command/>
+		 <RenderModification/>
+		 <PhysiologyModification/>
+		 <PerformanceAssessment/>		 
+      </Subscriptions>
+      <Publications>
+         <OperationalDescription/>
+         <ModuleConfiguration/>
+         <SimulationControl/>
+		 <RenderModification/>
+		 <PhysiologyModification/>
+		 <PerformanceAssessment/>
+      </Publications>
+   </Capability>
+   <Configuration>
+      <Capability type="serial_bridge">
+         <xs:schema targetNamespace="urn:AdvancedModularManikin"
+                    xmlns="urn:AdvancedModularManikin"
+                    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                    elementFormDefault="qualified">
+            <xs:element name="enable" type="xs:boolean" default="true">
+               <xs:annotation>
+                  <xs:appinfo>Usage:</xs:appinfo>
+                  <xs:documentation xml:lang="en">
+                     Enable Serial Bridge
+                  </xs:documentation>
+               </xs:annotation>
+            </xs:element>            
+         </xs:schema>
+      </Capability>
+   </Configuration>
+</CapabilitiesSchema>
