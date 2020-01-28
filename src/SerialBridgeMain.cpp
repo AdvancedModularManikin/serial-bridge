@@ -168,20 +168,6 @@ public:
        LOG_DEBUG << "Command received from AMM: " << c.message();
        if (!c.message().compare(0, sysPrefix.size(), sysPrefix)) {
           std::string value = c.message().substr(sysPrefix.size());
-          if (value.compare("START_SIM") == 0) {
-
-          } else if (value.compare("STOP_SIM") == 0) {
-
-          } else if (value.compare("PAUSE_SIM") == 0) {
-
-          } else if (value.compare("RESET_SIM") == 0) {
-
-          } else if (!value.compare(0, loadScenarioPrefix.size(), loadScenarioPrefix)) {
-             std::string scene = value.substr(loadScenarioPrefix.size());
-             LOG_DEBUG << "Time to load scene " << scene;
-
-             sendConfigInfo(scene, "liquid_sensor");
-          }
           // Send it on through the bridge
           std::ostringstream cmdMessage;
           cmdMessage << "[AMM_Command]" << value << "\n";
@@ -235,31 +221,32 @@ void readHandler() {
          LOG_DEBUG << "\tXML: " << value;
          tinyxml2::XMLDocument doc(false);
          doc.Parse(value.c_str());
-         tinyxml2::XMLNode *root = doc.FirstChildElement("Configuration");
+         tinyxml2::XMLNode *root = doc.FirstChildElement("AMMModuleConfiguration");
 
          if (root) {
             tinyxml2::XMLNode *mod = root->FirstChildElement("module");
             tinyxml2::XMLElement *module = mod->ToElement();
 
             if (initializing) {
-               LOG_INFO << "Module is initializing, so we'll publish the configuration.";
+               LOG_INFO << "Module is initializing, so we'll publish the Operational Description.";
 
                std::string module_name = module->Attribute("name");
                std::string manufacturer = module->Attribute("manufacturer");
                std::string model = module->Attribute("model");
                std::string serial_number = module->Attribute("serial_number");
                std::string module_version = module->Attribute("module_version");
-/*
-               mgr->module_name = module_name;
-               mgr->PublishModuleConfiguration(
-                  mgr->module_id,
-                  module_name,
-                  manufacturer,
-                  model,
-                  serial_number,
-                  module_version,
-                  value
-               );*/
+
+               AMM::OperationalDescription od;
+               od.name(module_name);
+               od.model(module_name);
+               od.manufacturer(manufacturer);
+               od.serial_number(serial_number);
+               od.module_id(m_uuid);
+               od.module_version(module_version);
+               // const std::string capabilities = AMM::Utility::read_file_to_string("config/tcp_bridge_capabilities.xml");
+               // od.capabilities_schema(capabilities);
+               mgr->WriteOperationalDescription(od);
+
                initializing = false;
             }
 
@@ -356,23 +343,26 @@ void readHandler() {
                   std::string capabilityName = cap->Attribute("name");
                   std::string statusVal = cap->Attribute("status");
 
+                  AMM::Status s;
+                  s.module_id(m_uuid);
+                  s.capability(capabilityName);
+
                   if (statusVal == "OPERATIONAL") {
-                     //mgr->SetStatus(mgr->module_id, nodeName, capabilityName, OPERATIONAL);
+                     s.value(AMM::StatusValue::OPERATIONAL);
                   } else if (statusVal == "HALTING_ERROR") {
+                     s.value(AMM::StatusValue::INOPERATIVE);
                      if (cap->Attribute("message")) {
                         std::string errorMessage = cap->Attribute("message");
-                        std::vector<std::string> errorMessages = {errorMessage};
-                       // mgr->SetStatus(mgr->module_id, nodeName, capabilityName, HALTING_ERROR, errorMessages);
+                        s.message(errorMessage);
                      } else {
-                       // mgr->SetStatus(mgr->module_id, nodeName, capabilityName, HALTING_ERROR);
                      }
                   } else if (statusVal == "IMPENDING_ERROR") {
+                     s.value(AMM::StatusValue::EXIGENT);
                      if (cap->Attribute("message")) {
                         std::string errorMessage = cap->Attribute("message");
-                        std::vector<std::string> errorMessages = {errorMessage};
-                        //mgr->SetStatus(mgr->module_id, nodeName, capabilityName, IMPENDING_ERROR,                                       errorMessages);
+                        s.message(errorMessage);
                      } else {
-                        // mgr->SetStatus(mgr->module_id, nodeName, capabilityName, IMPENDING_ERROR);
+
                      }
                   } else {
                      LOG_ERROR << "Invalid status value " << statusVal << " for capability " << capabilityName;
@@ -512,6 +502,9 @@ static void show_usage(const std::string &name) {
 
 int main(int argc, char *argv[]) {
    LOG_INFO << "Linux Serial_Bridge starting up";
+   std::string sPort = PORT_LINUX;
+   int baudRate = BAUD;
+
 
    for (int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
@@ -521,11 +514,21 @@ int main(int argc, char *argv[]) {
       }
 
       if (arg == "-b") {
-// accept baud rate, overwrite BAUD
+         if (i + 1 < argc) {
+            baudRate = stoi(argv[i++]);
+         } else {
+            LOG_ERROR << arg << " option requires one argument.";
+            return 1;
+         }
       }
 
       if (arg == "-p") {
-// accept COM port, overwrite PORT_LINUX
+         if (i + 1 < argc) {
+            sPort = argv[i++];
+         } else {
+            LOG_ERROR << arg << " option requires one argument.";
+            return 1;
+         }
       }
    }
 
@@ -534,7 +537,8 @@ int main(int argc, char *argv[]) {
    char eolchar = '\n';
    int timeout = 500;
    char buf[buf_max];
-   strcpy(serialport, PORT_LINUX);
+   strcpy(serialport, sPort.c_str());
+
 
    mgr->InitializeCommand();
    mgr->InitializeInstrumentData();
@@ -568,12 +572,12 @@ int main(int argc, char *argv[]) {
 
    std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
-   PublishOperationalDescription();
-   PublishConfiguration();
+   // PublishOperationalDescription();
+   // PublishConfiguration();
 
    std::thread ec(checkForExit);
 
-   fd = serialport_init(serialport, BAUD);
+   fd = serialport_init(serialport, baudRate);
    if (fd == -1) {
       LOG_ERROR << "Unable to open serial port " << serialport;
       exit(EXIT_FAILURE);
