@@ -493,14 +493,17 @@ void PublishConfiguration() {
 
 static void show_usage(const std::string &name) {
    std::cerr << "Usage: " << name << " <option(s)>"
-             << "\nOptions:\n"
-             << "\t-p Linux COM port (defaults to " << PORT_LINUX << ")"
-             << "\t-b COM port baud rate (defaults to " << BAUD << ")"
+             << "\nOptions:\n" << std::endl
+             << "\t-p Linux COM port (defaults to " << PORT_LINUX << ")" << std::endl
+             << "\t-b COM port baud rate (defaults to " << BAUD << ")" << std::endl
              << "\t-h,--help\t\tShow this help message\n"
              << std::endl;
 }
 
 int main(int argc, char *argv[]) {
+   static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
+   plog::init(plog::verbose, &consoleAppender);
+
    LOG_INFO << "Linux Serial_Bridge starting up";
    std::string sPort = PORT_LINUX;
    int baudRate = BAUD;
