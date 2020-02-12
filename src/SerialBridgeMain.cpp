@@ -21,7 +21,7 @@ extern "C" {
 
 #include "tinyxml2.h"
 
-#define PORT_LINUX "/dev/tty96B0"
+#define PORT_LINUX "/dev/serial0"
 #define BAUD 115200
 
 using namespace AMM;
@@ -162,6 +162,42 @@ public:
           transmitQ.push(messageOut.str());
        }
 
+    }
+    void onNewSimulationControl(AMM::SimulationControl &simControl, SampleInfo_t *info) {
+
+       switch (simControl.type()) {
+          case AMM::ControlType::RUN: {
+             LOG_INFO << "SimControl Message recieved; Run sim.";
+             std::ostringstream cmdMessage;
+             cmdMessage << "[AMM_Command][SYS]START_SIM\n";
+             transmitQ.push(cmdMessage.str());
+             break;
+          }
+
+          case AMM::ControlType::HALT: {
+             LOG_INFO << "SimControl recieved; Halt sim";
+             std::ostringstream cmdMessage;
+             cmdMessage << "[AMM_Command][SYS]PAUSE_SIM\n";
+             transmitQ.push(cmdMessage.str());
+             break;
+          }
+
+          case AMM::ControlType::RESET: {
+             LOG_INFO << "SimControl recieved; Reset sim";
+             std::ostringstream cmdMessage;
+             cmdMessage << "[AMM_Command][SYS]RESET_SIM\n";
+             transmitQ.push(cmdMessage.str());
+             break;
+          }
+
+          case AMM::ControlType::SAVE: {
+             LOG_INFO << "SimControl recieved; Save sim";
+             std::ostringstream cmdMessage;
+             cmdMessage << "[AMM_Command][SYS]SAVE_STATE\n";
+             transmitQ.push(cmdMessage.str());
+             break;
+          }
+       }
     }
 
     void onNewCommand(AMM::Command &c, eprosima::fastrtps::SampleInfo_t *info) {
@@ -416,6 +452,7 @@ void readHandler() {
             assessment.comment(modInfo);
             mgr->WriteAssessment(assessment);
          } else if (topic == "AMM_Diagnostics_Log_Record") {
+            LOG_INFO << "Got a log topic";
             if (modType == "info") {
                LOG_INFO << modPayload;
             } else if (modType == "warning") {
@@ -565,6 +602,7 @@ int main(int argc, char *argv[]) {
    mgr->CreateCommandSubscriber(&tl, &AMMListener::onNewCommand);
    mgr->CreateRenderModificationSubscriber(&tl, &AMMListener::onNewRenderModification);
    mgr->CreatePhysiologyModificationSubscriber(&tl, &AMMListener::onNewPhysiologyModification);
+   mgr->CreateSimulationControlSubscriber(&tl, &AMMListener::onNewSimulationControl);
 
    mgr->CreateRenderModificationPublisher();
    mgr->CreatePhysiologyModificationPublisher();
