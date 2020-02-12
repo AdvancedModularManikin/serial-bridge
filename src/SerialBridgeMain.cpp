@@ -169,7 +169,7 @@ public:
           case AMM::ControlType::RUN: {
              LOG_INFO << "SimControl Message recieved; Run sim.";
              std::ostringstream cmdMessage;
-             cmdMessage << "[AMM_Command][SYS]START_SIM\n";
+             cmdMessage << "[AMM_Command]START_SIM\n";
              transmitQ.push(cmdMessage.str());
              break;
           }
@@ -177,7 +177,7 @@ public:
           case AMM::ControlType::HALT: {
              LOG_INFO << "SimControl recieved; Halt sim";
              std::ostringstream cmdMessage;
-             cmdMessage << "[AMM_Command][SYS]PAUSE_SIM\n";
+             cmdMessage << "[AMM_Command]PAUSE_SIM\n";
              transmitQ.push(cmdMessage.str());
              break;
           }
@@ -185,7 +185,7 @@ public:
           case AMM::ControlType::RESET: {
              LOG_INFO << "SimControl recieved; Reset sim";
              std::ostringstream cmdMessage;
-             cmdMessage << "[AMM_Command][SYS]RESET_SIM\n";
+             cmdMessage << "[AMM_Command]RESET_SIM\n";
              transmitQ.push(cmdMessage.str());
              break;
           }
@@ -193,7 +193,7 @@ public:
           case AMM::ControlType::SAVE: {
              LOG_INFO << "SimControl recieved; Save sim";
              std::ostringstream cmdMessage;
-             cmdMessage << "[AMM_Command][SYS]SAVE_STATE\n";
+             cmdMessage << "[AMM_Command]SAVE_STATE\n";
              transmitQ.push(cmdMessage.str());
              break;
           }
