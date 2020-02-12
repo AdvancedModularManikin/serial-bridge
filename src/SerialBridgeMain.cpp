@@ -452,7 +452,6 @@ void readHandler() {
             assessment.comment(modInfo);
             mgr->WriteAssessment(assessment);
          } else if (topic == "AMM_Diagnostics_Log_Record") {
-            LOG_INFO << "Got a log topic";
             if (modType == "info") {
                LOG_INFO << modPayload;
             } else if (modType == "warning") {
