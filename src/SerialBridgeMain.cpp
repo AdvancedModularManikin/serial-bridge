@@ -333,8 +333,8 @@ void readHandler() {
                         std::string subTopicName = s->Attribute("name");
 
 
-                        if (s->Attribute("name")) {
-                           std::string subname = s->Attribute("name");
+                        if (s->Attribute("nodepath")) {
+                           std::string subname = s->Attribute("nodepath");
                            if (subTopicName == "AMM_HighFrequencyNode_Data") {
                               subTopicName = "HF_" + subname;
                            } else {
