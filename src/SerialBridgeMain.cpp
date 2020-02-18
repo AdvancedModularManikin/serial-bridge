@@ -286,8 +286,7 @@ void readHandler() {
                initializing = false;
             }
 
-            subscribedTopics.clear();
-            publishedTopics.clear();
+
             tinyxml2::XMLNode *caps = mod->FirstChildElement("capabilities");
 
             if (caps) {
@@ -327,6 +326,8 @@ void readHandler() {
                   // Store subscribed topics for this capability
                   tinyxml2::XMLNode *subs = node->FirstChildElement("subscribed_topics");
                   if (subs) {
+                     subscribedTopics.clear();
+
                      for (tinyxml2::XMLNode *sub = subs->FirstChildElement(
                         "topic"); sub; sub = sub->NextSibling()) {
                         tinyxml2::XMLElement *s = sub->ToElement();
@@ -355,6 +356,7 @@ void readHandler() {
                   // Store published topics for this capability
                   tinyxml2::XMLNode *pubs = node->FirstChildElement("published_topics");
                   if (pubs) {
+                     publishedTopics.clear();
                      for (tinyxml2::XMLNode *pub = pubs->FirstChildElement(
                         "topic"); pub; pub = pub->NextSibling()) {
                         tinyxml2::XMLElement *p = pub->ToElement();
