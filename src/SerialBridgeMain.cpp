@@ -383,6 +383,7 @@ void readHandler() {
 
                   AMM::Status s;
                   s.module_id(m_uuid);
+                  s.module_name(nodeName);
                   s.capability(capabilityName);
 
                   if (statusVal == "OPERATIONAL") {
@@ -405,6 +406,7 @@ void readHandler() {
                   } else {
                      LOG_ERROR << "Invalid status value " << statusVal << " for capability " << capabilityName;
                   }
+                  mgr->WriteStatus(s);
                }
             }
          }
