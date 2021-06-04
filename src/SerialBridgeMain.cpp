@@ -20,9 +20,11 @@ extern "C" {
 }
 
 #include "tinyxml2.h"
+#include <gpiod.h>
 
 #define PORT_LINUX "/dev/serial0"
 #define BAUD 115200
+#define MCU_ENABLE_LINE 6
 
 using namespace AMM;
 using namespace std;
@@ -593,7 +595,6 @@ int main(int argc, char *argv[]) {
    char buf[buf_max];
    strcpy(serialport, sPort.c_str());
 
-
    mgr->InitializeCommand();
    mgr->InitializeInstrumentData();
    mgr->InitializeSimulationControl();
@@ -626,6 +627,17 @@ int main(int argc, char *argv[]) {
    m_uuid.id(mgr->GenerateUuidString());
 
    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+   // set up GPIO enable line
+   const char *chipname = "gpiochip0";
+   struct gpiod_chip *chip;
+   struct gpiod_line *lineMCUEnable;
+   // open GPIO chip
+   chip = gpiod_chip_open_by_name(chipname);
+   // configure GPIO line
+   lineMCUEnable = gpiod_chip_get_line(chip, MCU_ENABLE_LINE);
+   gpiod_line_request_output(lineMCUEnable, "serial bridge enable", 0);
+   gpiod_line_set_value(lineMCUEnable, true);
 
    // PublishOperationalDescription();
    // PublishConfiguration();
@@ -666,6 +678,10 @@ int main(int argc, char *argv[]) {
    }
 
    serialport_close(fd);
+
+   // release GPIO line and chip
+   gpiod_line_release(lineMCUEnable);
+   gpiod_chip_close(chip);
 
    ec.join();
 

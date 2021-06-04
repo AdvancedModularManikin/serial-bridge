@@ -13,6 +13,7 @@ target_link_libraries(
    PUBLIC Boost::system
    PUBLIC pthread
    ${TinyXML2_LIBRARIES}
+   PUBLIC gpiod
 )
 
 install(TARGETS amm_serial_bridge RUNTIME DESTINATION bin)
