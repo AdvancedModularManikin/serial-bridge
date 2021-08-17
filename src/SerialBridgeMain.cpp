@@ -3,6 +3,8 @@
 #include <boost/bind.hpp>
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
+#include <boost/program_options.hpp>
+#include <boost/filesystem.hpp>
 
 #include <vector>
 #include <queue>
@@ -14,6 +16,7 @@
 #include <iostream>
 
 #include "amm_std.h"
+#include "Errors.h"
 
 extern "C" {
 #include "Serial/arduino-serial-lib.h"
@@ -21,11 +24,13 @@ extern "C" {
 
 #include "tinyxml2.h"
 
-#define PORT_LINUX "/dev/serial0"
-#define BAUD 115200
+#define DEFAULT_SERIAL_DEVICE "/dev/ttyMSM1"
+#define DEFAULT_BAUD_RATE 115200
+const std::string SERIAL_BRIDGE_VERSION = "1.0.0";
+
+int g_log_level = 0;
 
 using namespace AMM;
-using namespace std;
 using namespace std::chrono;
 using namespace tinyxml2;
 
@@ -40,19 +45,19 @@ std::string actionPrefix = "[AMM_Command]";
 std::string genericTopicPrefix = "[";
 std::string xmlPrefix = "<?xml";
 
-const string capabilityPrefix = "CAPABILITY=";
-const string settingsPrefix = "SETTINGS=";
-const string statusPrefix = "STATUS=";
-const string configPrefix = "CONFIG=";
-const string modulePrefix = "MODULE_NAME=";
-const string registerPrefix = "REGISTER=";
-const string keepHistoryPrefix = "KEEP_HISTORY=";
-const string keepAlivePrefix = "[KEEPALIVE]";
-const string loadScenarioPrefix = "LOAD_SCENARIO:";
-const string haltingString = "HALTING_ERROR";
-const string sysPrefix = "[SYS]";
-const string actPrefix = "[ACT]";
-const string loadPrefix = "LOAD_STATE:";
+const std::string capabilityPrefix = "CAPABILITY=";
+const std::string settingsPrefix = "SETTINGS=";
+const std::string statusPrefix = "STATUS=";
+const std::string configPrefix = "CONFIG=";
+const std::string modulePrefix = "MODULE_NAME=";
+const std::string registerPrefix = "REGISTER=";
+const std::string keepHistoryPrefix = "KEEP_HISTORY=";
+const std::string keepAlivePrefix = "[KEEPALIVE]";
+const std::string loadScenarioPrefix = "LOAD_SCENARIO:";
+const std::string haltingString = "HALTING_ERROR";
+const std::string sysPrefix = "[SYS]";
+const std::string actPrefix = "[ACT]";
+const std::string loadPrefix = "LOAD_STATE:";
 
 std::vector<std::string> subscribedTopics;
 std::vector<std::string> publishedTopics;
@@ -63,6 +68,58 @@ std::queue<std::string> transmitQ;
 
 int fd = -1;
 int rc;
+
+
+// Boost doesn't offer any obvious way to construct a usage string
+// from an infinite list of positional parameters.  This hack
+// should work in most reasonable cases.
+std::vector<std::string> get_unlimited_positional_args_(const boost::program_options::positional_options_description& p)
+{
+  assert(p.max_total_count() == std::numeric_limits<unsigned>::max());
+
+  std::vector<std::string> parts;
+
+  // reasonable upper limit for number of positional options:
+  const int MAX = 1000;
+  std::string last = p.name_for_position(MAX);
+
+  for (int i = 0; true; ++i) {
+    std::string cur = p.name_for_position(i);
+    if (cur == last) {
+      parts.push_back(cur);
+      return parts;
+    }
+    parts.push_back(cur);
+  }
+  return parts; // never get here
+}
+
+std::string make_usage_string_(const std::string& program_name, const boost::program_options::options_description& desc, boost::program_options::positional_options_description& p)
+{
+  std::vector<std::string> parts;
+  parts.push_back("Usage: ");
+  parts.push_back(program_name);
+  if (desc.options().size() > 0) {
+    parts.push_back("[options]");
+  }
+  size_t N = p.max_total_count();
+  if (N == std::numeric_limits<unsigned>::max()) {
+    std::vector<std::string> args = get_unlimited_positional_args_(p);
+    parts.insert(parts.end(), args.begin(), args.end());
+  } else {
+    for (int i = 0; i < N; ++i) {
+      parts.push_back(p.name_for_position(i));
+    }
+  }
+  std::ostringstream oss;
+  std::copy(
+    parts.begin(),
+    parts.end(),
+    std::ostream_iterator<std::string>(oss, " "));
+  oss << '\n'
+      << desc;
+  return oss.str();
+}
 
 
 void sendConfigInfo(std::string scene, std::string module) {
@@ -90,13 +147,16 @@ public:
        std::string hfname = "HF_" + n.name();
        if (std::find(subscribedTopics.begin(), subscribedTopics.end(), hfname) != subscribedTopics.end()) {
           std::ostringstream messageOut;
-          map<string, string>::iterator i = subMaps.find(hfname);
+	  std::map<std::string, std::string>::iterator i = subMaps.find(hfname);
           if (i == subMaps.end()) {
              messageOut << "[AMM_Node_Data]" << n.name() << "=" << n.value() << std::endl;
           } else {
              messageOut << "[" << i->first << "]" << n.value() << std::endl;
           }
 
+	  if(g_log_level > 0){
+             LOG_INFO << messageOut.str();
+	  }
           rc = serialport_write(fd, messageOut.str().c_str());
           if (rc == -1) {
              LOG_ERROR << " Error writing to serial port";
@@ -108,13 +168,16 @@ public:
        // Publish values that are supposed to go out on every change
        if (std::find(subscribedTopics.begin(), subscribedTopics.end(), n.name()) != subscribedTopics.end()) {
           std::ostringstream messageOut;
-          map<string, string>::iterator i = subMaps.find(n.name());
+	  std::map<std::string, std::string>::iterator i = subMaps.find(n.name());
           if (i == subMaps.end()) {
              messageOut << "[AMM_Node_Data]" << n.name() << "=" << n.value() << std::endl;
           } else {
              messageOut << "[" << i->first << "]" << n.value() << std::endl;
           }
 
+	  if(g_log_level > 0){
+             LOG_INFO << messageOut.str();
+	  }
           rc = serialport_write(fd, messageOut.str().c_str());
           if (rc == -1) {
              LOG_ERROR << " Error writing to serial port";
@@ -218,7 +281,7 @@ public:
 
 const std::string moduleName = "AMM_Serial_Bridge";
 const std::string configFile = "config/serial_bridge_amm.xml";
-AMM::DDSManager<AMMListener> *mgr = new AMM::DDSManager<AMMListener>(configFile);
+AMM::DDSManager<AMMListener> *g_mgr;
 AMM::UUID m_uuid;
 
 void PublishSettings(std::string const &equipmentType) {
@@ -233,7 +296,7 @@ void PublishSettings(std::string const &equipmentType) {
    AMM::InstrumentData i;
    i.instrument(equipmentType);
    i.payload(payload.str());
-   mgr->WriteInstrumentData(i);
+   g_mgr->WriteInstrumentData(i);
 }
 
 void readHandler() {
@@ -250,7 +313,7 @@ void readHandler() {
          AMM::Command cmdInstance;
          boost::trim_right(value);
          cmdInstance.message(value);
-         mgr->WriteCommand(cmdInstance);
+         g_mgr->WriteCommand(cmdInstance);
       } else if (!rsp.compare(0, xmlPrefix.size(), xmlPrefix)) {
          std::string value = rsp;
          LOG_INFO << "Received XML via serial";
@@ -281,7 +344,7 @@ void readHandler() {
                od.module_version(module_version);
                // const std::string capabilities = AMM::Utility::read_file_to_string("config/tcp_bridge_capabilities.xml");
                // od.capabilities_schema(capabilities);
-               mgr->WriteOperationalDescription(od);
+               g_mgr->WriteOperationalDescription(od);
 
                initializing = false;
             }
@@ -417,7 +480,7 @@ void readHandler() {
                   } else {
                      LOG_ERROR << "Invalid status value " << statusVal << " for capability " << capabilityName;
                   }
-                  mgr->WriteStatus(s);
+                  g_mgr->WriteStatus(s);
                }
             }
          }
@@ -455,17 +518,17 @@ void readHandler() {
             renderMod.type(modType);
             renderMod.data(modPayload);
             //renderMod.location().description(modLocation);
-            mgr->WriteRenderModification(renderMod);
+            g_mgr->WriteRenderModification(renderMod);
          } else if (topic == "AMM_Physiology_Modification") {
             AMM::PhysiologyModification physMod;
             physMod.type(modType);
             physMod.data(modPayload);
             //physMod.location().description(modLocation);
-            mgr->WritePhysiologyModification(physMod);
+            g_mgr->WritePhysiologyModification(physMod);
          } else if (topic == "AMM_Performance_Assessment") {
             AMM::Assessment assessment;
             assessment.comment(modInfo);
-            mgr->WriteAssessment(assessment);
+            g_mgr->WriteAssessment(assessment);
          } else if (topic == "AMM_Diagnostics_Log_Record") {
             if (modType == "info") {
                LOG_INFO << modPayload;
@@ -527,7 +590,7 @@ void PublishOperationalDescription() {
    const std::string capabilities = AMM::Utility::read_file_to_string("config/serial_bridge_capabilities.xml");
    od.capabilities_schema(capabilities);
    od.description();
-   mgr->WriteOperationalDescription(od);
+   g_mgr->WriteOperationalDescription(od);
 }
 
 void PublishConfiguration() {
@@ -538,92 +601,106 @@ void PublishConfiguration() {
    mc.name(moduleName);
    const std::string configuration = AMM::Utility::read_file_to_string("config/serial_bridge_configuration.xml");
    mc.capabilities_configuration(configuration);
-   mgr->WriteModuleConfiguration(mc);
+   g_mgr->WriteModuleConfiguration(mc);
 }
 
-
-static void show_usage(const std::string &name) {
-   std::cerr << "Usage: " << name << " <option(s)>"
-             << "\nOptions:\n" << std::endl
-             << "\t-p Linux COM port (defaults to " << PORT_LINUX << ")" << std::endl
-             << "\t-b COM port baud rate (defaults to " << BAUD << ")" << std::endl
-             << "\t-h,--help\t\tShow this help message\n"
-             << std::endl;
-}
 
 int main(int argc, char *argv[]) {
    static plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
    plog::init(plog::verbose, &consoleAppender);
 
-   LOG_INFO << "Linux Serial_Bridge starting up";
-   std::string sPort = PORT_LINUX;
-   int baudRate = BAUD;
+   using namespace boost::program_options;
 
+   std::string help_message;
 
-   for (int i = 1; i < argc; ++i) {
-      std::string arg = argv[i];
-      if ((arg == "-h") || (arg == "--help")) {
-         show_usage(argv[0]);
-         return 0;
-      }
+   options_description desc("Allowed options");
+   options_description all_options;
+   positional_options_description p;
+   variables_map vm;
+   
+   // Declare the supported options.
+   desc.add_options() /**/
+       ("help,h"  , "produce help message") /**/
+       ("device,p"   , value<std::string>()->default_value(DEFAULT_SERIAL_DEVICE), "Change the default device used for serial communication.")/**/
+       ("rate,b"     , value<int>()->default_value(static_cast<int>(DEFAULT_BAUD_RATE)), "Set the baud rate for communication") /**/
+       ("verbosity,v", value<int>()->default_value(static_cast<int>(0)), "Adjust the default verbosity rate") /**/
+       ("version" , bool_switch()->default_value(false), "Print the version of this application");
 
-      if (arg == "-b") {
-         if (i + 1 < argc) {
-            baudRate = stoi(argv[i++]);
-         } else {
-            LOG_ERROR << arg << " option requires one argument.";
-            return 1;
-         }
-      }
+   all_options.add(desc);
+    
+   boost::filesystem::path exe_path { argv[0] }; 
+   help_message = make_usage_string_(exe_path.filename().string(), desc, p);
+   try {
 
-      if (arg == "-p") {
-         if (i + 1 < argc) {
-            sPort = argv[i++];
-         } else {
-            LOG_ERROR << arg << " option requires one argument.";
-            return 1;
-         }
-      }
+     store(command_line_parser(argc, argv)
+         	    .options(all_options)
+         	    .positional(p)
+         	    .run(), vm);
+     notify(vm);
+
+     if (vm.count("help") ) {
+       std::cout << help_message << std::endl;
+       exit(amm::ExecutionErrors::NO_ERROR);
+     }
+
+     if (vm["version"].as<bool>()) {
+       std::cout << SERIAL_BRIDGE_VERSION  << std::endl;
+       exit(amm::ExecutionErrors::NO_ERROR);
+     }
+    
+     g_log_level = vm["verbosity"].as<int>();
+
+   } catch (boost::program_options::required_option e) {
+     std::cerr << e.what() << "\n\n";
+     std::cout << help_message << std::endl;
+     exit(amm::ExecutionErrors::ARGUMENT_ERROR);
+   } catch (std::exception& e) {
+     std::cerr << e.what() << std::endl;
+     std::cout << help_message << std::endl;
+     exit(amm::ExecutionErrors::ARGUMENT_ERROR);
    }
 
-   const int buf_max = 8192;
+   LOG_INFO << "Linux Serial_Bridge starting up";
+   g_mgr = new AMM::DDSManager<AMMListener>(configFile);
+   const int buf_max =  8192;
    char serialport[40];
    char eolchar = '\n';
    int timeout = 500;
    char buf[buf_max];
-   strcpy(serialport, sPort.c_str());
+   std::string serialDevice = vm["device"].as<std::string>();
+   strcpy(serialport, serialDevice.c_str());
 
 
-   mgr->InitializeCommand();
-   mgr->InitializeInstrumentData();
-   mgr->InitializeSimulationControl();
-   mgr->InitializePhysiologyModification();
-   mgr->InitializeRenderModification();
-   mgr->InitializeAssessment();
-   mgr->InitializePhysiologyValue();
+   g_mgr->InitializeCommand();
+   g_mgr->InitializeInstrumentData();
+   g_mgr->InitializeSimulationControl();
+   g_mgr->InitializePhysiologyModification();
+   g_mgr->InitializeRenderModification();
+   g_mgr->InitializeAssessment();
+   g_mgr->InitializePhysiologyValue();
 
-   mgr->InitializeOperationalDescription();
-   mgr->InitializeModuleConfiguration();
-   mgr->InitializeStatus();
+   g_mgr->InitializeOperationalDescription();
+   g_mgr->InitializeModuleConfiguration();
+   g_mgr->InitializeStatus();
 
-   mgr->CreateOperationalDescriptionPublisher();
-   mgr->CreateModuleConfigurationPublisher();
-   mgr->CreateStatusPublisher();
+   g_mgr->CreateOperationalDescriptionPublisher();
+   g_mgr->CreateModuleConfigurationPublisher();
+   g_mgr->CreateStatusPublisher();
 
    AMMListener tl;
    
-   mgr->CreatePhysiologyValueSubscriber(&tl, &AMMListener::onNewPhysiologyValue);
-   mgr->CreateCommandSubscriber(&tl, &AMMListener::onNewCommand);
-   mgr->CreateRenderModificationSubscriber(&tl, &AMMListener::onNewRenderModification);
-   mgr->CreatePhysiologyModificationSubscriber(&tl, &AMMListener::onNewPhysiologyModification);
-   mgr->CreateSimulationControlSubscriber(&tl, &AMMListener::onNewSimulationControl);
+   g_mgr->CreatePhysiologyValueSubscriber(&tl, &AMMListener::onNewPhysiologyValue);
+   g_mgr->CreateCommandSubscriber(&tl, &AMMListener::onNewCommand);
+   g_mgr->CreateRenderModificationSubscriber(&tl, &AMMListener::onNewRenderModification);
+   g_mgr->CreatePhysiologyModificationSubscriber(&tl, &AMMListener::onNewPhysiologyModification);
+   g_mgr->CreateSimulationControlSubscriber(&tl, &AMMListener::onNewSimulationControl);
 
-   mgr->CreateRenderModificationPublisher();
-   mgr->CreatePhysiologyModificationPublisher();
-   mgr->CreateCommandPublisher();
-   mgr->CreateInstrumentDataPublisher();
+   g_mgr->CreateRenderModificationPublisher();
+   g_mgr->CreatePhysiologyModificationPublisher();
+   g_mgr->CreateCommandPublisher();
+   g_mgr->CreateInstrumentDataPublisher();
 
-   m_uuid.id(mgr->GenerateUuidString());
+   m_uuid.id(g_mgr->GenerateUuidString());
 
    std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
@@ -632,10 +709,10 @@ int main(int argc, char *argv[]) {
 
    std::thread ec(checkForExit);
 
-   fd = serialport_init(serialport, baudRate);
+   fd = serialport_init(serialport, vm["rate"].as<int>());
    if (fd == -1) {
       LOG_ERROR << "Unable to open serial port " << serialport;
-      exit(EXIT_FAILURE);
+      exit(amm::ExecutionErrors::SERIAL_FAILURE);
    }
 
    LOG_INFO << "Opened port " << serialport;
@@ -649,13 +726,17 @@ int main(int argc, char *argv[]) {
    while (!closed) {
       memset(buf, 0, buf_max);  //
       serialport_read_until(fd, buf, eolchar, buf_max, timeout);
-      //        LOG_DEBUG << "Read in string: " << buf;
+      if(g_log_level > 2) {
+         LOG_DEBUG << "Read in string: " << buf;
+      }
       globalInboundBuffer += buf;
       readHandler();
 
       while (!transmitQ.empty()) {
          std::string sendStr = transmitQ.front();
-         // LOG_DEBUG << "Writing from transmitQ: " << sendStr;
+         if(g_log_level > 2) {
+           LOG_DEBUG << "Writing from transmitQ: " << sendStr;
+         }
          rc = serialport_write(fd, sendStr.c_str());
          if (rc == -1) {
             LOG_ERROR << " Error writing to serial port";
@@ -669,5 +750,5 @@ int main(int argc, char *argv[]) {
 
    ec.join();
 
-   exit(EXIT_SUCCESS);
+   exit(amm::ExecutionErrors::SUCCESS);
 }
