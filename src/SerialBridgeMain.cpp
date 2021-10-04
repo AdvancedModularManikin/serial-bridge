@@ -276,7 +276,7 @@ void readHandler() {
 
                AMM::OperationalDescription od;
                od.name(module_name);
-               od.model(module_name);
+               od.model(model);
                od.manufacturer(manufacturer);
                od.serial_number(serial_number);
                od.module_id(m_uuid);
@@ -285,6 +285,10 @@ void readHandler() {
                // od.capabilities_schema(capabilities);
                mgr->WriteOperationalDescription(od);
 
+               // load static config data for serial bridge client module on startup
+               std::transform(model.begin(), model.end(), model.begin(), ::toupper);
+               std::transform(module_name.begin(), module_name.end(), module_name.begin(), ::toupper);
+               sendConfigInfo(model, module_name);
                initializing = false;
             }
 
@@ -612,8 +616,9 @@ int main(int argc, char *argv[]) {
    mgr->CreateStatusPublisher();
 
    AMMListener tl;
-   
+
    mgr->CreatePhysiologyValueSubscriber(&tl, &AMMListener::onNewPhysiologyValue);
+   //mgr->CreatePhysiologyWaveformSubscriber(&tl, &AMMListener::onNewPhysiologyWaveform);
    mgr->CreateCommandSubscriber(&tl, &AMMListener::onNewCommand);
    mgr->CreateRenderModificationSubscriber(&tl, &AMMListener::onNewRenderModification);
    mgr->CreatePhysiologyModificationSubscriber(&tl, &AMMListener::onNewPhysiologyModification);
