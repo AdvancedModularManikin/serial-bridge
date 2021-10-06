@@ -55,6 +55,7 @@ const string haltingString = "HALTING_ERROR";
 const string sysPrefix = "[SYS]";
 const string actPrefix = "[ACT]";
 const string loadPrefix = "LOAD_STATE:";
+std::string client_module_name;
 
 std::vector<std::string> subscribedTopics;
 std::vector<std::string> publishedTopics;
@@ -206,10 +207,20 @@ public:
        LOG_DEBUG << "Command received from AMM: " << c.message();
        if (!c.message().compare(0, sysPrefix.size(), sysPrefix)) {
           std::string value = c.message().substr(sysPrefix.size());
-          // Send it on through the bridge
-          std::ostringstream cmdMessage;
-          cmdMessage << "[AMM_Command]" << value << "\n";
-          transmitQ.push(cmdMessage.str());
+
+          // for configuration command send config file content
+          if (!value.compare(0, configPrefix.size(), configPrefix)) {
+             std::string model = value.substr(configPrefix.size());
+             std::transform(model.begin(), model.end(), model.begin(), ::toupper);
+
+             sendConfigInfo(model, client_module_name);
+          } else {
+
+            // Send it on through the bridge
+            std::ostringstream cmdMessage;
+            cmdMessage << "[AMM_Command]" << value << "\n";
+            transmitQ.push(cmdMessage.str());
+          }
        } else {
           std::ostringstream cmdMessage;
           cmdMessage << "[AMM_Command]" << c.message() << "\n";
@@ -288,6 +299,7 @@ void readHandler() {
                // load static config data for serial bridge client module on startup
                std::transform(model.begin(), model.end(), model.begin(), ::toupper);
                std::transform(module_name.begin(), module_name.end(), module_name.begin(), ::toupper);
+               client_module_name = module_name;
                sendConfigInfo(model, module_name);
                initializing = false;
             }
