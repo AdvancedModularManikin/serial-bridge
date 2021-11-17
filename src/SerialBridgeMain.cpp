@@ -417,6 +417,11 @@ void readHandler() {
 
                   if (statusVal == "OPERATIONAL") {
                      s.value(AMM::StatusValue::OPERATIONAL);
+                     if (cap->Attribute("message")) {
+                        std::string errorMessage = cap->Attribute("message");
+                        s.message(errorMessage);
+                     } else {
+                     }
                   } else if (statusVal == "HALTING_ERROR") {
                      s.value(AMM::StatusValue::INOPERATIVE);
                      if (cap->Attribute("message")) {
