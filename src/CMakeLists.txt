@@ -13,6 +13,7 @@ target_link_libraries(
    PUBLIC Boost::system
    PUBLIC pthread
    tinyxml2
+   PUBLIC gpiod
 )
 
 install(TARGETS amm_serial_bridge RUNTIME DESTINATION bin)

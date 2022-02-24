@@ -20,9 +20,11 @@ extern "C" {
 }
 
 #include "tinyxml2.h"
+#include <gpiod.h>
 
 #define PORT_LINUX "/dev/serial0"
 #define BAUD 115200
+#define MCU_ENABLE_LINE 6
 
 using namespace AMM;
 using namespace std;
@@ -53,6 +55,7 @@ const string haltingString = "HALTING_ERROR";
 const string sysPrefix = "[SYS]";
 const string actPrefix = "[ACT]";
 const string loadPrefix = "LOAD_STATE:";
+std::string client_module_name;
 
 std::vector<std::string> subscribedTopics;
 std::vector<std::string> publishedTopics;
@@ -204,10 +207,20 @@ public:
        LOG_DEBUG << "Command received from AMM: " << c.message();
        if (!c.message().compare(0, sysPrefix.size(), sysPrefix)) {
           std::string value = c.message().substr(sysPrefix.size());
-          // Send it on through the bridge
-          std::ostringstream cmdMessage;
-          cmdMessage << "[AMM_Command]" << value << "\n";
-          transmitQ.push(cmdMessage.str());
+
+          // for configuration command send config file content
+          if (!value.compare(0, configPrefix.size(), configPrefix)) {
+             std::string model = value.substr(configPrefix.size());
+             std::transform(model.begin(), model.end(), model.begin(), ::toupper);
+
+             sendConfigInfo(model, client_module_name);
+          } else {
+
+            // Send it on through the bridge
+            std::ostringstream cmdMessage;
+            cmdMessage << "[AMM_Command]" << value << "\n";
+            transmitQ.push(cmdMessage.str());
+          }
        } else {
           std::ostringstream cmdMessage;
           cmdMessage << "[AMM_Command]" << c.message() << "\n";
@@ -274,7 +287,7 @@ void readHandler() {
 
                AMM::OperationalDescription od;
                od.name(module_name);
-               od.model(module_name);
+               od.model(model);
                od.manufacturer(manufacturer);
                od.serial_number(serial_number);
                od.module_id(m_uuid);
@@ -283,6 +296,11 @@ void readHandler() {
                // od.capabilities_schema(capabilities);
                mgr->WriteOperationalDescription(od);
 
+               // load static config data for serial bridge client module on startup
+               std::transform(model.begin(), model.end(), model.begin(), ::toupper);
+               std::transform(module_name.begin(), module_name.end(), module_name.begin(), ::toupper);
+               client_module_name = module_name;
+               sendConfigInfo(model, module_name);
                initializing = false;
             }
 
@@ -399,6 +417,11 @@ void readHandler() {
 
                   if (statusVal == "OPERATIONAL") {
                      s.value(AMM::StatusValue::OPERATIONAL);
+                     if (cap->Attribute("message")) {
+                        std::string errorMessage = cap->Attribute("message");
+                        s.message(errorMessage);
+                     } else {
+                     }
                   } else if (statusVal == "HALTING_ERROR") {
                      s.value(AMM::StatusValue::INOPERATIVE);
                      if (cap->Attribute("message")) {
@@ -593,7 +616,6 @@ int main(int argc, char *argv[]) {
    char buf[buf_max];
    strcpy(serialport, sPort.c_str());
 
-
    mgr->InitializeCommand();
    mgr->InitializeInstrumentData();
    mgr->InitializeSimulationControl();
@@ -611,8 +633,9 @@ int main(int argc, char *argv[]) {
    mgr->CreateStatusPublisher();
 
    AMMListener tl;
-   
+
    mgr->CreatePhysiologyValueSubscriber(&tl, &AMMListener::onNewPhysiologyValue);
+   //mgr->CreatePhysiologyWaveformSubscriber(&tl, &AMMListener::onNewPhysiologyWaveform);
    mgr->CreateCommandSubscriber(&tl, &AMMListener::onNewCommand);
    mgr->CreateRenderModificationSubscriber(&tl, &AMMListener::onNewRenderModification);
    mgr->CreatePhysiologyModificationSubscriber(&tl, &AMMListener::onNewPhysiologyModification);
@@ -626,6 +649,17 @@ int main(int argc, char *argv[]) {
    m_uuid.id(mgr->GenerateUuidString());
 
    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+   // set up GPIO enable line
+   const char *chipname = "gpiochip0";
+   struct gpiod_chip *chip;
+   struct gpiod_line *lineMCUEnable;
+   // open GPIO chip
+   chip = gpiod_chip_open_by_name(chipname);
+   // configure GPIO line
+   lineMCUEnable = gpiod_chip_get_line(chip, MCU_ENABLE_LINE);
+   gpiod_line_request_output(lineMCUEnable, "serial bridge enable", 0);
+   gpiod_line_set_value(lineMCUEnable, true);
 
    // PublishOperationalDescription();
    // PublishConfiguration();
@@ -666,6 +700,10 @@ int main(int argc, char *argv[]) {
    }
 
    serialport_close(fd);
+
+   // release GPIO line and chip
+   gpiod_line_release(lineMCUEnable);
+   gpiod_chip_close(chip);
 
    ec.join();
 
