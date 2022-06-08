@@ -67,6 +67,10 @@ std::queue<std::string> transmitQ;
 int fd = -1;
 int rc;
 
+// set up GPIO enable line
+const char *chipname = "gpiochip0";
+struct gpiod_chip *chip;
+struct gpiod_line *lineMCUEnable;
 
 void sendConfigInfo(std::string scene, std::string module) {
    std::ostringstream static_filename;
@@ -526,6 +530,15 @@ void checkForExit() {
    }
 }
 
+void reset_gpio() {
+   // reset GPIO & release line and chip
+   gpiod_line_set_value(lineMCUEnable, true);
+   gpiod_line_release(lineMCUEnable);
+
+   gpiod_line_request_input(lineMCUEnable, "serial bridge enable");
+   gpiod_line_release(lineMCUEnable);
+   gpiod_chip_close(chip);
+}
 
 void signalHandler(int signum) {
    LOG_WARNING << "Interrupt signal (" << signum << ") received.";
@@ -534,7 +547,7 @@ void signalHandler(int signum) {
       serialport_close(fd);
       LOG_INFO << "Shutdown complete";
    }
-
+   reset_gpio();
    exit(signum);
 }
 
@@ -650,16 +663,12 @@ int main(int argc, char *argv[]) {
 
    std::this_thread::sleep_for(std::chrono::milliseconds(250));
 
-   // set up GPIO enable line
-   const char *chipname = "gpiochip0";
-   struct gpiod_chip *chip;
-   struct gpiod_line *lineMCUEnable;
    // open GPIO chip
    chip = gpiod_chip_open_by_name(chipname);
    // configure GPIO line
    lineMCUEnable = gpiod_chip_get_line(chip, MCU_ENABLE_LINE);
-   gpiod_line_request_output(lineMCUEnable, "serial bridge enable", 0);
-   gpiod_line_set_value(lineMCUEnable, true);
+   gpiod_line_request_output(lineMCUEnable, "serial bridge enable", 1);
+   gpiod_line_set_value(lineMCUEnable, false);
 
    // PublishOperationalDescription();
    // PublishConfiguration();
@@ -700,10 +709,7 @@ int main(int argc, char *argv[]) {
    }
 
    serialport_close(fd);
-
-   // release GPIO line and chip
-   gpiod_line_release(lineMCUEnable);
-   gpiod_chip_close(chip);
+   reset_gpio();
 
    ec.join();
 
