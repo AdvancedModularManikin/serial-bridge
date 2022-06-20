@@ -2,9 +2,9 @@
 <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
    <profiles>
       <participant profile_name="amm_participant">
+	 <domainId>1</domainId>
          <rtps>
             <name>AMM_Serial_Bridge</name>
-            <participantID>15</participantID>
          </rtps>
       </participant>
    </profiles>
