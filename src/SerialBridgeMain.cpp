@@ -226,11 +226,13 @@ public:
             // Send it on through the bridge
             std::ostringstream cmdMessage;
             cmdMessage << "[AMM_Command]" << value << "\n";
+	    LOG_TRACE << " Sending to MCU: " << cmdMessage.str();
             transmitQ.push(cmdMessage.str());
           }
        } else {
           std::ostringstream cmdMessage;
           cmdMessage << "[AMM_Command]" << c.message() << "\n";
+	  LOG_TRACE << " Sending to MCU: " << cmdMessage.str();
           transmitQ.push(cmdMessage.str());
        }
     }
