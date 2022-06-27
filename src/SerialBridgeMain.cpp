@@ -212,6 +212,9 @@ public:
        if (!c.message().compare(0, sysPrefix.size(), sysPrefix)) {
           std::string value = c.message().substr(sysPrefix.size());
 
+          // strip manikin ID if present
+           value  = value.substr(0, string1.find(";mid="));
+
           // for configuration command send config file content
           if (!value.compare(0, configPrefix.size(), configPrefix)) {
              std::string model = value.substr(configPrefix.size());
