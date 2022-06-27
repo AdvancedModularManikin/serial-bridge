@@ -213,7 +213,7 @@ public:
           std::string value = c.message().substr(sysPrefix.size());
 
           // strip manikin ID if present
-           value  = value.substr(0, string1.find(";mid="));
+           value  = value.substr(0, value.find(";mid="));
 
           // for configuration command send config file content
           if (!value.compare(0, configPrefix.size(), configPrefix)) {
