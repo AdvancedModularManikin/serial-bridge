@@ -9,10 +9,10 @@ add_executable(amm_serial_bridge ${SERIAL_BRIDGE_MODULE_SOURCES})
 target_link_libraries(
    amm_serial_bridge
    PUBLIC amm_std
-   PUBLIC Boost::thread
-   PUBLIC Boost::system
+   PUBLIC boost_thread
+   PUBLIC boost_system
    PUBLIC pthread
-   tinyxml2
+   PUBLIC tinyxml2
    PUBLIC gpiod
 )
 
